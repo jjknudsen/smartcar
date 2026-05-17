@@ -40,11 +40,28 @@ from homeassistant.helpers.network import NoURLAvailableError, get_url
 from .const import (
     CALLBACK_PATH,
     CONF_USER_ID,
+    DOMAIN,
     OAUTH2_AUTHORIZE,
     OAUTH2_TOKEN,
 )
 
 _LOGGER = logging.getLogger(__name__)
+_CALLBACK_VIEW_REGISTERED = f"{DOMAIN}_callback_view_registered"
+
+
+def _ensure_callback_view_registered(hass: HomeAssistant) -> None:
+    """Register the Smartcar OAuth callback view at most once.
+
+    HA only calls ``async_setup`` after a config entry exists, which means
+    the view would not be reachable during the very first OAuth flow.
+    ``async_get_authorization_server`` runs as part of the flow's
+    authorize-URL construction, so registering here guarantees the
+    callback path is live before Smartcar can redirect to it.
+    """
+    if hass.data.get(_CALLBACK_VIEW_REGISTERED):
+        return
+    hass.http.register_view(SmartcarOAuthCallbackView())
+    hass.data[_CALLBACK_VIEW_REGISTERED] = True
 
 
 def _redirect_url(hass: HomeAssistant) -> str:
@@ -130,9 +147,10 @@ async def async_get_auth_implementation(
 
 
 async def async_get_authorization_server(  # noqa: RUF029
-    hass: HomeAssistant,  # noqa: ARG001
+    hass: HomeAssistant,
 ) -> AuthorizationServer:
     """Return Smartcar's OAuth2 authorization server endpoints."""
+    _ensure_callback_view_registered(hass)
     return AuthorizationServer(
         authorize_url=OAUTH2_AUTHORIZE,
         token_url=OAUTH2_TOKEN,

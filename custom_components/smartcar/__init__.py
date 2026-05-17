@@ -19,7 +19,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .application_credentials import SmartcarOAuthCallbackView
+from .application_credentials import _ensure_callback_view_registered
 from .auth import AbstractAuth
 from .auth_impl import AccessTokenAuthImpl, AsyncConfigEntryAuth  # noqa: F401
 from .const import API_HOST, CONF_CLOUDHOOK, CONF_USER_ID, DOMAIN, PLATFORMS
@@ -42,7 +42,7 @@ async def async_setup(  # noqa: RUF029
         If the setup was successful.
     """
     async_setup_services(hass)
-    hass.http.register_view(SmartcarOAuthCallbackView())
+    _ensure_callback_view_registered(hass)
 
     return True
 
