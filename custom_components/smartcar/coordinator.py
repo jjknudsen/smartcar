@@ -587,8 +587,7 @@ class SmartcarVehicleCoordinator(DataUpdateCoordinator):
                 continue
             config = DATAPOINT_ENTITY_KEY_MAP[key]
 
-            # currently polling is only supported via the v2 api
-            if config.endpoint_v2 and not entity.disabled:
+            if config.code and not entity.disabled and self.is_scope_enabled(key):
                 self._batch_add(key)
 
     def _batch_process(self) -> list[EntityDescriptionKey]:
@@ -606,33 +605,18 @@ class SmartcarVehicleCoordinator(DataUpdateCoordinator):
         return result
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from API using selective batch endpoint.
+        """Fetch the latest signals for this vehicle via v3 list-signals.
 
         Returns:
-            The updated data.
+            The merged data dict.
 
         Raises:
             ConfigEntryAuthFailed: If an authentication failure occurs.
-            ClientResponseError: If the update fails for any reason.
-            UpdateFailed: If the update fails to provide the proper response.
+            ClientResponseError: For other transport errors not consumed by retry.
+            UpdateFailed: If the API returns a retryable status after retries.
         """
 
         batch_requests = self._batch_process()
-
-        assert not any(
-            DATAPOINT_ENTITY_KEY_MAP[key].endpoint_v2 is None for key in batch_requests
-        )
-
-        request_path = f"vehicles/{self.vehicle_id}/batch"
-        request_batch_paths = sorted(
-            {
-                v2_endpoint
-                for key in batch_requests
-                if (v2_endpoint := DATAPOINT_ENTITY_KEY_MAP[key].endpoint_v2)
-                is not None
-            }
-        )
-        request_body = {"requests": [{"path": path} for path in request_batch_paths]}
 
         if not batch_requests:
             _LOGGER.warning(
@@ -641,26 +625,22 @@ class SmartcarVehicleCoordinator(DataUpdateCoordinator):
             )
             return self.data
 
+        request_path = f"vehicles/{self.vehicle_id}/signals"
+
         _LOGGER.debug(
-            "Coordinator %s: Requesting batch update (Interval: %s) for paths: %s",
+            "Coordinator %s: Requesting signals (Interval: %s)",
             self.name,
             self.update_interval,
-            request_batch_paths,
         )
 
         try:
             response = await async_request_with_retry(
-                lambda: self.auth.request("post", request_path, json=request_body),
+                lambda: self.auth.request(
+                    "get", request_path, params={"page[size]": 100}
+                ),
                 logger=_LOGGER,
                 context=f"Coordinator {self.name}",
             )
-
-        # response errors here for responses that have actually completed, i.e.
-        # 4xx responses are for errors related to requests made in the
-        # underlying oauth handler. for instance, the implementation will raise
-        # for invalid an invalid status while negotiating a new token if there's
-        # an issue. unfortunately, it consumes the JSON response to log about
-        # the error, so we can only match on the status code.
         except ClientResponseError as exception:
             if exception.status in {
                 HTTPStatus.BAD_REQUEST,
@@ -680,58 +660,96 @@ class SmartcarVehicleCoordinator(DataUpdateCoordinator):
         response.raise_for_status()
         response_data = await response.json()
 
-        if "responses" not in response_data:
-            msg = "Invalid batch response format"
+        if "data" not in response_data:
+            msg = "Invalid signals response format"
             raise UpdateFailed(msg)
 
-        return self._merge_batch_data(response_data)
+        return self._merge_signals(response_data["data"])
 
-    def _merge_batch_data(self, batch_data: dict[str, Any]) -> dict[str, Any]:
-        """Merge data from the responses from a batch request.
+    def _merge_signals(
+        self, signals: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Merge the v3 list-signals response into the coordinator data.
+
+        Each entry of ``signals`` is a JSON:API resource with shape::
+
+            {
+              "id": "...", "type": "signal",
+              "attributes": {
+                "code": "tractionbattery-stateofcharge",
+                "status": {"value": "SUCCESS"|"ERROR"|...},
+                "body": {"unit": "...", "value": ...},
+                ...
+              },
+              "meta": {"retrievedAt": "...", "oemUpdatedAt": "...", ...}
+            }
+
+        We feed each entry into :meth:`_DataAdder.from_response_body` (the
+        same path used by webhook deliveries) so the polling and webhook
+        paths share value-parsing logic.
 
         Returns:
             The newly merged data.
         """
+        from .webhooks import (  # noqa: PLC0415
+            _IMPERIAL_MEASUREMENTS,
+            _handle_percent_unit_conversion,
+        )
 
         with self.create_updated_data() as (add, updated_data):
-            for item in batch_data["responses"]:
-                path = item["path"]
-                code = item["code"]
-                body = item["body"]
-                headers = item.get("headers") or {}
-                unit_system = headers.get("sc-unit-system")
-                data_age = headers.get("sc-data-age")
-                fetched_at = headers.get("sc-fetched-at")
-                key = path.strip("/").replace("/", "_")
+            for entry in signals:
+                attributes = entry.get("attributes") or {}
+                code = attributes.get("code")
+                if code not in DATAPOINT_CODE_MAP:
+                    continue
 
-                if code != 200:
-                    body = None
-                    unit_system = None
-                    data_age = None
-                    fetched_at = None
+                status = attributes.get("status") or {}
+                is_error = status.get("value") == "ERROR"
+                body = dict(attributes.get("body") or {})
+                meta = attributes.get("meta") or entry.get("meta") or {}
 
-                if data_age:
+                if is_error:
+                    _LOGGER.debug(
+                        "Coordinator %s: signal %s returned error: %s",
+                        self.name,
+                        code,
+                        status.get("error"),
+                    )
+                    body = {"value": None}
+
+                if body.get("unit") == "percent":
+                    _handle_percent_unit_conversion(code, body)
+
+                unit = body.pop("unit", None)
+                unit_system = (
+                    "imperial"
+                    if unit in _IMPERIAL_MEASUREMENTS
+                    else "metric"
+                    if unit
+                    else None
+                )
+
+                data_age = meta.get("oemUpdatedAt") if not is_error else None
+                fetched_at = meta.get("retrievedAt") if not is_error else None
+                if isinstance(data_age, str):
                     data_age = dt_util.parse_datetime(data_age)
-                if fetched_at:
+                elif isinstance(data_age, (int, float)):
+                    data_age = dt_util.utc_from_timestamp(data_age / 1000)
+                if isinstance(fetched_at, str):
                     fetched_at = dt_util.parse_datetime(fetched_at)
+                elif isinstance(fetched_at, (int, float)):
+                    fetched_at = dt_util.utc_from_timestamp(fetched_at / 1000)
 
-                add.from_response_body_v2(
-                    key,
+                add.from_response_body(
+                    code,
                     body=body,
                     unit_system=unit_system,
                     data_age=data_age,
                     fetched_at=fetched_at,
+                    can_clear_meta=not is_error,
                 )
 
-                if code not in {200, 404}:
-                    _LOGGER.warning(
-                        "Coordinator %s: Status %s for path %s",
-                        self.name,
-                        code,
-                        path,
-                    )
-
-            _LOGGER.debug("Coordinator %s: Batch update processed", self.name)
+            _LOGGER.debug("Coordinator %s: signals processed", self.name)
 
             return updated_data
 

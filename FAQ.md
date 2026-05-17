@@ -1,5 +1,12 @@
 # Smartcar Integration – FAQ
 
+### Smartcar v3 API migration
+
+This integration now uses Smartcar's **v3 API** (`vehicle.api.smartcar.com/v3` + the `client_credentials` OAuth flow and the `sc-user-id` header). If you set up the integration before this change, you will be prompted to re-authenticate after upgrading; the migration cannot derive your Smartcar `user_id` from the older per-user OAuth tokens. Two specific changes to be aware of:
+
+1. **Credentials live on the *API Credentials* tab.** New Smartcar applications no longer expose the legacy *Client* fields. Use **Configuration → API Credentials → Create Secret** in the [Smartcar dashboard](https://dashboard.smartcar.com/team/applications) and copy the **Client ID** and **Client Secret** from there.
+2. **The OAuth redirect URI has changed** from `https://my.home-assistant.io/redirect/oauth` to a URL on your Home Assistant instance ending in `/api/smartcar/callback`. Home Assistant displays the exact URL during setup; paste it into the *Authorized redirect URIs* field on the same Configuration page. The previous My Home Assistant redirect cannot work because that endpoint strips Smartcar's new `user_id` callback parameter.
+
 Before diving into deeper troubleshooting, it’s worth checking a few common Smartcar resources. Many issues can be explained (or avoided) by understanding the platform, brand, or plan limitations.
 
 ### Pre-flight check list:

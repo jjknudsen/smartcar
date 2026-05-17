@@ -29,6 +29,7 @@ from .const import (
     API_HOST,
     CONF_APPLICATION_MANAGEMENT_TOKEN,
     CONF_CLOUDHOOK,
+    CONF_USER_ID,
     CONFIGURABLE_SCOPES,
     DEFAULT_NAME,
     DEFAULT_SCOPES,
@@ -92,7 +93,7 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
     """Config flow to handle Smartcar OAuth2 authentication."""
 
     DOMAIN = DOMAIN
-    VERSION = 2
+    VERSION = 3
     MINOR_VERSION = 0
     entry_data: dict[str, Any] | None = None
     scope_data: dict[str, Any] | None = None
@@ -251,18 +252,19 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
         assert self.entry_data is not None
 
         session = async_get_clientsession(self.hass)
-        token = data[CONF_TOKEN][CONF_ACCESS_TOKEN]
-        auth = AccessTokenAuthImpl(session, token, API_HOST)
+        access_token = data[CONF_TOKEN][CONF_ACCESS_TOKEN]
+        user_id = data[CONF_TOKEN].get(CONF_USER_ID)
+        if not user_id:
+            _LOGGER.error("Smartcar Connect callback did not return a user_id")
+            return self.async_abort(reason="missing_user_id")
+
+        auth = AccessTokenAuthImpl(session, access_token, API_HOST, user_id=user_id)
         data = {**self.entry_data, **data}
         data.pop(CONF_USE_WEBHOOKS, None)
         description_placeholders = {**BASE_DESCRIPTION_PLACEHOLDERS}
 
         try:
-            await populate_entry_data(
-                data,
-                auth,
-                self.requested_scopes,
-            )
+            await populate_entry_data(data, auth, user_id)
         except EmptyVehicleListError:
             _LOGGER.exception("No vehicles returned")
             return self.async_abort(reason="no_vehicles")

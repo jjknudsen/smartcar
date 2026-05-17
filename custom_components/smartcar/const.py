@@ -2,7 +2,8 @@ from enum import StrEnum, auto
 
 DOMAIN = "smartcar"
 DEFAULT_NAME = "Smartcar"
-API_HOST = "https://api.smartcar.com"
+API_HOST = "https://vehicle.api.smartcar.com"
+API_VERSION = "3"
 
 PLATFORMS = [
     "sensor",
@@ -14,8 +15,11 @@ PLATFORMS = [
 ]
 
 OAUTH2_AUTHORIZE = "https://connect.smartcar.com/oauth/authorize"
-OAUTH2_TOKEN = "https://auth.smartcar.com/oauth/token"  # noqa: S105
+OAUTH2_TOKEN = "https://iam.smartcar.com/oauth2/token"  # noqa: S105
 SMARTCAR_MODE = "live"
+
+CALLBACK_PATH = "/api/smartcar/callback"
+CONF_USER_ID = "user_id"
 
 CONF_APPLICATION_MANAGEMENT_TOKEN = "application_management_token"  # noqa: S105
 CONF_CLOUDHOOK = "cloudhook"

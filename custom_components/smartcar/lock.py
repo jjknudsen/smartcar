@@ -58,7 +58,7 @@ class SmartcarDoorLock(SmartcarEntity[bool, bool], LockEntity):
         self,
         **kwargs,  # noqa: ARG002, ANN003
     ) -> None:
-        if await self._async_send_command("/security", {"action": "LOCK"}):
+        if await self._async_send_command("/commands/security/lock"):
             self._inject_raw_value(value=True)
             self.async_write_ha_state()
 
@@ -66,6 +66,6 @@ class SmartcarDoorLock(SmartcarEntity[bool, bool], LockEntity):
         self,
         **kwargs,  # noqa: ARG002, ANN003
     ) -> None:
-        if await self._async_send_command("/security", {"action": "UNLOCK"}):
+        if await self._async_send_command("/commands/security/unlock"):
             self._inject_raw_value(value=False)
             self.async_write_ha_state()

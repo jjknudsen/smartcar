@@ -3,14 +3,11 @@ import logging
 
 from aiohttp import ClientResponse, ClientSession
 
+from .const import API_VERSION
+
 _LOGGER = logging.getLogger(__name__)
 
 
-# note: this could be the start of allowing a separate client library to be
-# designed that would be compatible with HA integrations. this is following the
-# recommended design patterns for separating auth concerns from making api
-# requests. this integration, however, chooses to make raw http requests
-# instead of going through a library.
 class AbstractAuth(ABC):
     """Abstract class to make authenticated requests."""
 
@@ -23,11 +20,21 @@ class AbstractAuth(ABC):
     async def async_get_access_token(self) -> str:
         """Return a valid access token."""
 
+    async def async_get_user_id(self) -> str | None:
+        """Return the Smartcar user_id to scope requests to.
+
+        Returns:
+            The Smartcar user identifier, or None if the auth flow has not
+            yet captured one (e.g. during the initial config flow before the
+            redirect from Connect has completed).
+        """
+        return None
+
     async def request(
         self,
         method: str,
         path: str,
-        version: str = "2.0",
+        version: str = API_VERSION,
         **kwargs,  # noqa: ANN003
     ) -> ClientResponse:
         """Make a request.
@@ -36,22 +43,29 @@ class AbstractAuth(ABC):
             The client response.
         """
         access_token = await self.async_get_access_token()
+        user_id = await self.async_get_user_id()
         headers = dict(kwargs.pop("headers", {}))
         headers["authorization"] = f"Bearer {access_token}"
+        if user_id and "sc-user-id" not in {k.lower() for k in headers}:
+            headers["sc-user-id"] = user_id
+
+        url = (
+            path
+            if path.startswith(("http://", "https://"))
+            else f"{self._host}/v{version}/{path.lstrip('/')}"
+        )
 
         _LOGGER.debug(
-            "HTTP %s request %s/v%s/%s %r headers=%r",
+            "HTTP %s %s %r headers=%r",
             method,
-            self._host,
-            version,
-            path,
+            url,
             kwargs,
-            headers,
+            {k: v for k, v in headers.items() if k.lower() != "authorization"},
         )
 
         return await self._websession.request(
             method,
-            f"{self._host}/v{version}/{path}",
+            url,
             **kwargs,
             headers=headers,
         )

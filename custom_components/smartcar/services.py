@@ -96,7 +96,10 @@ async def _send_security_command(
         if description.key == EntityDescriptionKey.DOOR_LOCK
     )
 
-    if await async_send_command(coordinator, "/security", {"action": action}):
+    subpath = (
+        "/commands/security/lock" if action == "LOCK" else "/commands/security/unlock"
+    )
+    if await async_send_command(coordinator, subpath):
         inject_raw_value(coordinator, description, value=action == "LOCK")
 
         entities: list[er.RegistryEntry] = er.async_entries_for_config_entry(

@@ -86,8 +86,12 @@ class SmartcarChargeLimitNumber(
         assert value >= 50, "Value must be between 50 and 100"
         assert value <= 100, "Value must be between 50 and 100"
 
+        percent = int(round(value))
+        raw_value = percent / 100.0
+
         if await self._async_send_command(
-            "/charge/limit", {"limit": (raw_value := value / 100.0)}
+            "/commands/charge/set-limit",
+            {"data": {"attributes": {"percent": percent}}},
         ):
             non_global_or_conditional_limits = [
                 value

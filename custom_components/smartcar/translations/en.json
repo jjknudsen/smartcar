@@ -1,6 +1,6 @@
 {
     "application_credentials": {
-        "description": "Follow the [instructions]({more_info_url}) to configure Smartcar for your vehicle:\n\n1. Go to [Applications]({oauth_creds_url}) and your application from the list.\n1. Choose **Configuration** from the side menu.\n1. Copy the **Client ID**.\n1. Regenerate and copy the the **Client Secret**.\n1. Add `{redirect_url}` under *Authorized redirect URI*."
+        "description": "Follow the [instructions]({more_info_url}) to configure Smartcar for your vehicle. The integration now uses Smartcar's v3 API:\n\n1. Open [Applications]({oauth_creds_url}) and pick your application.\n1. Choose **Configuration** from the side menu, then the **API Credentials** tab.\n1. Click **Create Secret** and copy both the **Client ID** and **Client Secret**.\n1. On the same Configuration page, add `{redirect_url}` under *Authorized redirect URIs*."
     },
     "config": {
         "abort": {
@@ -13,6 +13,7 @@
             "invalid_access_token": "Invalid access token",
             "missing_configuration": "The component is not configured. Please follow the documentation.",
             "missing_credentials": "The integration requires application credentials.",
+            "missing_user_id": "Smartcar Connect did not return a user_id. Confirm that the authorized redirect URI in your Smartcar dashboard points at this Home Assistant instance.",
             "no_url_available": "No URL available. For information about this error, [check the help section]({docs_url})",
             "no_vehicles": "No vehicles were available to setup.",
             "oauth_error": "Received invalid token data.",

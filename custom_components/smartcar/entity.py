@@ -71,7 +71,7 @@ class SmartcarEntity[ValueT, RawValueT](
         if not self.enabled:
             return
 
-        if DATAPOINT_ENTITY_KEY_MAP[self.entity_description.key].endpoint_v2 is None:
+        if DATAPOINT_ENTITY_KEY_MAP[self.entity_description.key].code is None:
             msg = f"Unsupported update requests for: {self.entity_description.key}"
             raise NotImplementedError(msg)
 
@@ -157,10 +157,10 @@ class SmartcarEntity[ValueT, RawValueT](
     async def _async_send_command(
         self,
         subpath: str,
-        payload: dict[str, Any],
+        payload: dict[str, Any] | None = None,
         *,
         method: str = "post",
-        version: str = "2.0",
+        version: str | None = None,
         **kwargs,  # noqa: ARG002, ANN003
     ) -> bool:
         try:
@@ -267,21 +267,26 @@ def inject_raw_value[RawValueT](
 async def async_send_command(
     coordinator: SmartcarVehicleCoordinator,
     subpath: str,
-    payload: dict[str, Any],
+    payload: dict[str, Any] | None = None,
     *,
     method: str = "post",
-    version: str = "2.0",
+    version: str | None = None,
 ) -> bool:
     _LOGGER.info("Sending %s request for %s", subpath, coordinator.vin)
     success = False
+
+    request_kwargs: dict[str, Any] = {}
+    if payload is not None:
+        request_kwargs["json"] = payload
+    if version is not None:
+        request_kwargs["version"] = version
 
     try:
         resp = await async_request_with_retry(
             lambda: coordinator.auth.request(
                 method,
                 f"vehicles/{coordinator.vehicle_id}{subpath}",
-                version=version,
-                json=payload,
+                **request_kwargs,
             ),
             logger=_LOGGER,
             context=f"Command {subpath} for {coordinator.vin}",
