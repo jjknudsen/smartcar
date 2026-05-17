@@ -9,21 +9,24 @@ from custom_components.smartcar.application_credentials import (
 
 
 @pytest.mark.parametrize(
-    ("additional_components", "external_url", "expected_redirect_uri"),
+    ("external_url", "expected_redirect_uri"),
     [
-        ([], "https://example.com", "https://example.com/auth/external/callback"),
-        ([], None, "https://YOUR_DOMAIN:PORT/auth/external/callback"),
-        (["my"], "https://example.com", "https://my.home-assistant.io/redirect/oauth"),
+        ("https://example.com", "https://example.com/api/smartcar/callback"),
+        (None, "https://YOUR_DOMAIN:PORT/api/smartcar/callback"),
     ],
 )
 async def test_description_placeholders(
     hass: HomeAssistant,
-    additional_components: list[str],
     external_url: str | None,
     expected_redirect_uri: str,
 ) -> None:
-    """Test description placeholders."""
-    hass.config.components.update(additional_components)
+    """Test description placeholders.
+
+    Smartcar v3 sends ``user_id`` in the Connect redirect, which the stock
+    HA OAuth callback view drops. We register our own callback view at
+    ``/api/smartcar/callback`` and surface that URL in the credentials
+    setup dialog so users can configure it in the Smartcar dashboard.
+    """
     hass.config.external_url = external_url
     placeholders = await async_get_description_placeholders(hass)
     assert placeholders == {

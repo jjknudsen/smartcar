@@ -138,16 +138,21 @@ def mock_smartcar_auth(
         def __init__(
             self,
             websession: ClientSession,
-            oauth_session: OAuth2Session,
+            oauth_session: OAuth2Session | None,
             host: str,
+            user_id: str | None = "mock-user-id",
         ) -> None:
             super().__init__(websession, host)
             self._oauth_session = oauth_session
+            self._user_id = user_id
 
         async def async_get_access_token(self) -> str:
             if self._oauth_session:
                 await self._oauth_session.async_ensure_token_valid()
             return "mock-token"
+
+        async def async_get_user_id(self) -> str | None:
+            return self._user_id
 
     with (
         patch(
@@ -161,14 +166,14 @@ def mock_smartcar_auth(
         ),
         patch(
             "custom_components.smartcar.AccessTokenAuthImpl",
-            new=lambda session, _token, _host: MockAuth(
-                session, None, MOCK_API_ENDPOINT
+            new=lambda session, _token, _host, user_id=None: MockAuth(
+                session, None, MOCK_API_ENDPOINT, user_id=user_id
             ),
         ),
         patch(
             "custom_components.smartcar.config_flow.AccessTokenAuthImpl",
-            new=lambda session, _token, _host: MockAuth(
-                session, None, MOCK_API_ENDPOINT
+            new=lambda session, _token, _host, user_id=None: MockAuth(
+                session, None, MOCK_API_ENDPOINT, user_id=user_id
             ),
         ),
     ):
@@ -256,15 +261,15 @@ def mock_config_entry(
     return MockConfigEntry(
         domain=DOMAIN,
         unique_id=vehicle_id,
-        version=2,
+        version=3,
         minor_version=0,
         data={
             "auth_implementation": DOMAIN,
             "token": {
                 "access_token": "mock-access-token",
-                "refresh_token": "mock-refresh-token",
                 "expires_at": expires_at,
-                "scopes": " ".join(enabled_scopes),
+                "scopes": list(enabled_scopes),
+                "user_id": "mock-user-id",
                 "access_tier": 0,
                 "installed_app_id": "2d474f47-bab5-4438-9d37-478148b9d073",
             },

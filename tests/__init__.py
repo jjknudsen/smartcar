@@ -43,7 +43,7 @@ def aioclient_mock_append_vehicle_request(
 
     for http_call in http_calls:
         method = http_call.get("method", "get")
-        version = http_call.get("version", "2.0")
+        version = http_call.get("version", "3")
         params = http_call.get("params", {})
         status = http_call.get("status", 200)
         side_effect = http_call.get("side_effect")

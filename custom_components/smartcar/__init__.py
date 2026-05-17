@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .application_credentials import SmartcarOAuthCallbackView
 from .auth import AbstractAuth
-from .auth_impl import AsyncConfigEntryAuth
+from .auth_impl import AccessTokenAuthImpl, AsyncConfigEntryAuth  # noqa: F401
 from .const import API_HOST, CONF_CLOUDHOOK, CONF_USER_ID, DOMAIN, PLATFORMS
 from .coordinator import SmartcarVehicleCoordinator
 from .errors import EmptyVehicleListError, InvalidAuthError, MissingVINError
