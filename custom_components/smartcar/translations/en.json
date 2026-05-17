@@ -31,7 +31,8 @@
         "error": {
             "no_scopes": "At least one scope needs to be selected",
             "no_management_token": "Missing application management token",
-            "extraneous_management_token": "Do not provide application management token unless using webhooks"
+            "extraneous_management_token": "Do not provide application management token unless using webhooks",
+            "invalid_application_id": "Application ID must be a UUID (the value after /apps/ in the dashboard URL)"
         },
         "step": {
             "pick_implementation": {
@@ -40,6 +41,13 @@
             "reauth_confirm": {
                 "description": "The Smartcar integration needs to re-authenticate your account",
                 "title": "Authentication expired for {name}"
+            },
+            "application": {
+                "data": {
+                    "application_id": "Application ID"
+                },
+                "description": "Paste the **Application ID** (a UUID) for your app from the [Smartcar dashboard]({smartcar_url}). You can find it on the application overview page or in the URL after `/apps/`.\n\nNote: this is **not** the same as the `client_…` Client ID from the API Credentials tab — that pair (Client ID + Client Secret) was collected on the previous credentials screen. v3 uses both: the Application ID at Smartcar Connect and the Client ID/Secret pair when exchanging for an application token.",
+                "title": "Smartcar Application ID"
             },
             "webhooks": {
                 "data": {

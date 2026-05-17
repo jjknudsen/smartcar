@@ -21,6 +21,7 @@ SMARTCAR_MODE = "live"
 CALLBACK_PATH = "/api/smartcar/callback"
 CONF_USER_ID = "user_id"
 
+CONF_APPLICATION_ID = "application_id"
 CONF_APPLICATION_MANAGEMENT_TOKEN = "application_management_token"  # noqa: S105
 CONF_CLOUDHOOK = "cloudhook"
 

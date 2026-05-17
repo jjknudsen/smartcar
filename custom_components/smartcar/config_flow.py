@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import logging
 from typing import Any, cast
+from uuid import UUID
 
 from aiohttp import ClientConnectorError, ClientError
 from homeassistant.components import cloud, webhook
@@ -27,6 +28,7 @@ from . import populate_entry_data, vehicle_vins_in_use
 from .auth_impl import AccessTokenAuthImpl
 from .const import (
     API_HOST,
+    CONF_APPLICATION_ID,
     CONF_APPLICATION_MANAGEMENT_TOKEN,
     CONF_CLOUDHOOK,
     CONF_USER_ID,
@@ -116,11 +118,28 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
 
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
-        """Extra data that needs to be appended to the authorize url."""
+        """Extra data appended to the Smartcar Connect authorize URL.
 
+        Crucially this overrides ``client_id`` with the Smartcar Application
+        UUID (the long-form ID visible in the dashboard URL under ``/apps/``).
+        Smartcar's two OAuth endpoints accept different identifiers in v3:
+
+        - ``connect.smartcar.com/oauth/authorize`` (Connect) → Application
+          UUID
+        - ``iam.smartcar.com/oauth2/token`` (client_credentials) → the
+          ``client_…`` value from the *API Credentials* tab plus its secret
+
+        We collect the UUID in :py:meth:`async_step_application` and the
+        latter pair via Home Assistant's standard Application Credentials
+        dialog. ``AbstractOAuth2FlowHandler.async_step_auth`` merges this
+        dict onto the URL after the implementation has built it, so the
+        ``client_id`` here wins over the credential's ``client_id``.
+        """
+        application_id = (self.entry_data or {}).get(CONF_APPLICATION_ID)
         return {
             "mode": SMARTCAR_MODE,
             "scope": " ".join(self.requested_scopes),
+            **({"client_id": application_id} if application_id else {}),
         }
 
     def _initial_data(self) -> dict[str, Any]:
@@ -142,6 +161,63 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
     def requested_scopes(self) -> list[Scope]:
         return REQUIRED_SCOPES + self.selected_scopes
 
+    async def async_step_application(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Capture the Smartcar Application UUID.
+
+        v3 splits the OAuth client identifier in two: the Connect authorize
+        URL accepts the Application UUID, while ``iam.smartcar.com`` accepts
+        the ``client_…`` Client ID from the API Credentials tab. Home
+        Assistant's Application Credentials dialog only collects the latter
+        pair, so we need a separate step to capture the UUID.
+
+        Returns:
+            The config flow result.
+        """
+        errors: dict[str, str] = {}
+        description_placeholders = {
+            "smartcar_url": "https://dashboard.smartcar.com/team/applications",
+            "docs_url": "https://github.com/wbyoung/smartcar#configuration",
+        }
+
+        if user_input is not None:
+            application_id = user_input[CONF_APPLICATION_ID].strip()
+            try:
+                UUID(application_id)
+            except ValueError:
+                errors[CONF_APPLICATION_ID] = "invalid_application_id"
+            else:
+                self.entry_data = {
+                    **(self.entry_data or {}),
+                    CONF_APPLICATION_ID: application_id,
+                }
+                return await self.async_step_webhooks()
+
+        return self.async_show_form(
+            step_id="application",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_APPLICATION_ID): TextSelector(
+                            config=TextSelectorConfig(type=TextSelectorType.TEXT)
+                        ),
+                    }
+                ),
+                {
+                    CONF_APPLICATION_ID: (self._initial_data() or {}).get(
+                        CONF_APPLICATION_ID, ""
+                    )
+                }
+                if user_input is None
+                else user_input,
+            ),
+            errors=errors,
+            description_placeholders=description_placeholders,
+            last_step=False,
+        )
+
     async def async_step_webhooks(
         self,
         user_input: dict[str, Any] | None = None,
@@ -159,7 +235,7 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
             _validate_general_configuration_input(user_input, errors)
 
         if user_input is not None and not errors:
-            self.entry_data = {**user_input}
+            self.entry_data = {**(self.entry_data or {}), **user_input}
             self.entry_data.pop(CONF_USE_WEBHOOKS, None)
             return await self.async_step_scopes()
 
@@ -216,12 +292,16 @@ class SmartcarOAuth2FlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):  # ty
     async def async_step_auth(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        # add in the start of our customized flow if that hasn't been done yet
+        # interpose our customised steps (application UUID → webhooks → scopes)
+        # before kicking the OAuth dance off; on reauth we only need scopes
+        # since the rest is already on the existing entry.
         if self.source == SOURCE_REAUTH:
+            if (self.entry_data or {}).get(CONF_APPLICATION_ID) is None:
+                return await self.async_step_application()
             if self.scope_data is None:
                 return await self.async_step_scopes()
-        elif self.entry_data is None:
-            return await self.async_step_webhooks()
+        elif self.entry_data is None or CONF_APPLICATION_ID not in self.entry_data:
+            return await self.async_step_application()
         return await super().async_step_auth(user_input)
 
     async def async_step_reauth(

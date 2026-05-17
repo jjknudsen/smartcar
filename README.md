@@ -70,13 +70,17 @@ Initially, you will have the option to enable [webhooks](#webhooks). If desired,
 #### Authorization Data Entry
 
 > **Smartcar v3 / API migration:** This version of the integration uses the v3 API and the OAuth 2.0 `client_credentials` flow plus the `sc-user-id` request header. The values you copy from the Smartcar dashboard come from the **API Credentials** tab on the Configuration page (not the legacy *Client* fields, which Smartcar has begun hiding for new applications). If you previously set up this integration, you will be prompted to re-authenticate after upgrading.
+>
+> **You need three values from the Smartcar dashboard, not two.** v3 splits the OAuth identifier between Connect (which accepts your Application UUID) and the token endpoint (which accepts the `client_…` Client ID / Secret pair). The integration prompts for them on two screens: the standard *Application Credentials* dialog (Client ID + Client Secret) and a follow-up *Application ID* step.
 
-1. In the Smartcar dashboard, open your application's **Configuration** page and click the **API Credentials** tab. Press **Create Secret** and copy both the **Client ID** and **Client Secret**.
+1. In the Smartcar dashboard, open your application's **Configuration** page and note the **Application ID** at the top — it's a UUID and also appears in the URL after `/apps/`.
+1. Click the **API Credentials** tab. Press **Create Secret** and copy both the **Client ID** and **Client Secret**.
 1. Back in Home Assistant, choose a name for the credentials and paste the **Client ID** and **Client Secret**.
 1. **Set the "Authorized redirect URIs"** in the same Configuration page in the Smartcar dashboard. Add **exactly** the URI Home Assistant displays during setup (it ends with `/api/smartcar/callback`).
    - With Home Assistant Cloud (Nabu Casa) it will look like `https://<random>.ui.nabu.casa/api/smartcar/callback`.
    - With your own HTTPS hostname it will look like `https://your-domain.example/api/smartcar/callback`.
    - Note: the previous `https://my.home-assistant.io/redirect/oauth` value will not work for v3 because that endpoint strips the `user_id` parameter that Smartcar now sends.
+1. On the next screen Home Assistant asks for the **Application ID**. Paste the UUID you noted in step 1.
 1. Continue to the next step.
 1. Select the **Permissions** you want Home Assistant to be able to access. To enable all entities in this integration, select all relevant permissions:
    - Get total distance traveled
