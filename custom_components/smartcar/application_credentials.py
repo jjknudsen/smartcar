@@ -126,16 +126,25 @@ class SmartcarOAuth2Implementation(LocalOAuth2Implementation):
         return {**new_token, CONF_USER_ID: token.get(CONF_USER_ID)}
 
 
-async def async_get_auth_implementation(
+async def async_get_auth_implementation(  # noqa: RUF029
     hass: HomeAssistant,
     auth_domain: str,
     credential: ClientCredential,
 ) -> SmartcarOAuth2Implementation:
     """Return the Smartcar-specific OAuth2 implementation.
 
+    Also registers the OAuth callback view. ``application_credentials``
+    calls this method (instead of ``async_get_authorization_server``)
+    when an integration provides a custom implementation, and it does so
+    immediately after the user picks the credential — which is before
+    the authorize URL is built and well before Smartcar can redirect
+    back. That makes it the earliest reliable hook for view
+    registration on a clean install.
+
     Returns:
         A SmartcarOAuth2Implementation bound to the supplied credentials.
     """
+    _ensure_callback_view_registered(hass)
     return SmartcarOAuth2Implementation(
         hass,
         auth_domain,
@@ -149,7 +158,12 @@ async def async_get_auth_implementation(
 async def async_get_authorization_server(  # noqa: RUF029
     hass: HomeAssistant,
 ) -> AuthorizationServer:
-    """Return Smartcar's OAuth2 authorization server endpoints."""
+    """Return Smartcar's OAuth2 authorization server endpoints.
+
+    Not actually invoked by ``application_credentials`` when a custom
+    implementation is registered (see :func:`async_get_auth_implementation`),
+    but kept here for completeness and as a safety net.
+    """
     _ensure_callback_view_registered(hass)
     return AuthorizationServer(
         authorize_url=OAUTH2_AUTHORIZE,
