@@ -48,13 +48,22 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _redirect_url(hass: HomeAssistant) -> str:
-    """Compute the externally reachable Smartcar callback URL."""
+    """Compute the externally reachable Smartcar callback URL.
+
+    Prefers the Home Assistant Cloud (Nabu Casa) URL when available — that
+    URL stays stable across DNS/IP/cert changes, so the value the user
+    pastes into the Smartcar dashboard's *Authorized redirect URIs* field
+    keeps working even if their dynamic-DNS hostname or local cert rotates.
+    Falls back to ``external_url`` (then a placeholder) when Cloud is not
+    active.
+    """
     try:
         base = get_url(
             hass,
             allow_internal=False,
             allow_ip=False,
-            prefer_external=True,
+            allow_cloud=True,
+            prefer_cloud=True,
             require_ssl=True,
         )
     except NoURLAvailableError:
